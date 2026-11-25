@@ -1,0 +1,12 @@
+.venv/
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.DS_Store
+
+# Storage files (do not commit uploaded files or chunks)
+storage/uploads/*
+!storage/uploads/.gitkeep
+storage/files/*
+!storage/files/.gitkeep

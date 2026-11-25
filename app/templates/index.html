@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Resumable Chunked Upload Service (PST_AD_149)</title>
+  <!-- Bootstrap 5 CSS -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <!-- Custom Styling -->
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+
+  <!-- Top Navigation Bar -->
+  <header>
+    <nav class="navbar navbar-expand-lg navbar-light bg-white border-bottom shadow-sm">
+      <div class="container-fluid px-3 px-lg-4">
+        <a class="navbar-brand d-flex align-items-center" href="#" onclick="App.showScreen('upload'); return false;">
+          <span class="fs-4 me-2">📦</span>
+          <span class="navbar-brand-title fs-5">ChunkUpload</span>
+          <span class="badge bg-primary-subtle text-primary border border-primary-subtle ms-2">OJT Demo</span>
+        </a>
+
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarContent" aria-controls="navbarContent" aria-expanded="false" aria-label="Toggle navigation">
+          <span class="navbar-toggler-icon"></span>
+        </button>
+
+        <div class="collapse navbar-collapse" id="navbarContent">
+          <ul class="navbar-nav me-auto mb-2 mb-lg-0 ms-lg-3">
+            <li class="nav-item">
+              <a class="nav-link active" id="nav-upload" href="#" onclick="App.showScreen('upload'); return false;">Upload (S1)</a>
+            </li>
+            <li class="nav-item">
+              <a class="nav-link" id="nav-my-uploads" href="#" onclick="App.showScreen('my-uploads'); return false;">My Uploads (S2)</a>
+            </li>
+            <li class="nav-item">
+              <a class="nav-link" id="nav-all-uploads" href="#" onclick="App.showScreen('all-uploads'); return false;">
+                All Uploads (S3) <span class="badge bg-secondary ms-1">Admin</span>
+              </a>
+            </li>
+            <li class="nav-item">
+              <a class="nav-link" id="nav-test-lab" href="#" onclick="App.showScreen('test-lab'); return false;">
+                Test Lab (S4) <span class="badge bg-secondary ms-1">Admin</span>
+              </a>
+            </li>
+          </ul>
+
+          <!-- Role Switcher & Student Attribution -->
+          <div class="d-flex align-items-center gap-2">
+            <div class="input-group input-group-sm">
+              <label class="input-group-text bg-light text-muted" for="role-select">Role:</label>
+              <select class="form-select form-select-sm" id="role-select" onchange="App.handleRoleChange(this.value)">
+                <option value="uploader">Student Uploader</option>
+                <option value="admin">Platform Admin</option>
+              </select>
+            </div>
+            <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#aboutModal" title="About this Project">
+              Info
+            </button>
+          </div>
+        </div>
+      </div>
+    </nav>
+  </header>
+
+  <!-- Main Container -->
+  <main class="container-fluid px-3 px-lg-4 py-4" id="main-content">
+
+    <!-- Global Alert / Unfinished Upload Banner -->
+    <div id="unfinished-banner" class="alert alert-warning alert-dismissible d-none align-items-center shadow-sm" role="alert">
+      <div class="d-flex align-items-center flex-grow-1 flex-wrap gap-2">
+        <span class="fs-5">⚠️</span>
+        <span id="unfinished-banner-text">You have an unfinished upload. Choose the same file to continue.</span>
+        <button class="btn btn-sm btn-warning ms-auto" id="btn-banner-resume" onclick="App.promptResumeUnfinished()">
+          Resume Upload
+        </button>
+      </div>
+      <button type="button" class="btn-close" aria-label="Dismiss banner" onclick="document.getElementById('unfinished-banner').classList.add('d-none')"></button>
+    </div>
+
+    <!-- SCREEN 1: UPLOAD (S1) -->
+    <section id="screen-upload" class="app-screen">
+      <div class="row g-4">
+        <!-- Left Column: File Picker & Controls (5 cols on laptop) -->
+        <div class="col-12 col-lg-5">
+          <div class="card border-0 shadow-sm mb-4">
+            <div class="card-body p-4">
+              <h1 class="card-title h5 mb-3">Select File to Upload</h1>
+              
+              <!-- Dropzone -->
+              <div id="dropzone" class="dropzone-area mb-3" tabindex="0" role="button" aria-label="Drop file here or click to browse">
+                <input type="file" id="file-input" class="d-none">
+                <div class="py-2">
+                  <span class="fs-1 text-primary d-block mb-2">📁</span>
+                  <p class="mb-1 fw-medium text-dark">Drag and drop file here, or <span class="text-primary text-decoration-underline">browse</span></p>
+                  <small class="text-muted d-block">Max 500 MB · Chunked in 2 MB slices · SHA-256 verified</small>
+                </div>
+              </div>
+
+              <!-- Validation Message -->
+              <div id="file-validation-msg" class="alert alert-danger py-2 px-3 small d-none" role="alert"></div>
+
+              <!-- File Info Card -->
+              <div id="file-info-box" class="border rounded-3 p-3 bg-light mb-3 d-none">
+                <h2 class="h6 mb-2 fw-bold text-dark">File Details</h2>
+                <div class="small">
+                  <div class="d-flex justify-content-between mb-1">
+                    <span class="text-muted">Name:</span>
+                    <span class="fw-semibold text-truncate ms-2" style="max-width: 200px;" id="info-file-name">--</span>
+                  </div>
+                  <div class="d-flex justify-content-between mb-1">
+                    <span class="text-muted">Size:</span>
+                    <span class="fw-semibold" id="info-file-size">--</span>
+                  </div>
+                  <div class="d-flex justify-content-between mb-1">
+                    <span class="text-muted">Chunks (2 MB each):</span>
+                    <span class="fw-semibold" id="info-chunk-count">--</span>
+                  </div>
+                  <div class="d-flex justify-content-between align-items-center mb-0">
+                    <span class="text-muted">File SHA-256:</span>
+                    <span class="d-flex align-items-center">
+                      <span class="checksum-code me-1" id="info-file-hash">Calculating…</span>
+                      <button class="btn btn-sm btn-link p-0 text-decoration-none" id="btn-copy-hash" title="Copy full SHA-256" onclick="App.copyFullHash()">📋</button>
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Upload Action Controls -->
+              <div class="d-flex flex-wrap gap-2" id="upload-controls">
+                <button id="btn-start" class="btn btn-primary flex-grow-1" disabled onclick="App.startUpload()">
+                  <span>Start Upload</span>
+                </button>
+                <button id="btn-pause" class="btn btn-warning flex-grow-1 d-none" onclick="App.pauseUpload()">
+                  <span>Pause</span>
+                </button>
+                <button id="btn-resume" class="btn btn-success flex-grow-1 d-none" onclick="App.resumeUpload()">
+                  <span>Resume</span>
+                </button>
+                <button id="btn-cancel" class="btn btn-outline-danger flex-grow-1 d-none" onclick="App.cancelUpload()">
+                  <span>Cancel</span>
+                </button>
+              </div>
+
+              <div class="mt-2 text-center">
+                <small class="text-muted">Tip: Press <kbd>Space</kbd> anywhere on this card to pause or resume.</small>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right Column: Progress & Chunk Map (7 cols on laptop) -->
+        <div class="col-12 col-lg-7">
+          <div class="card border-0 shadow-sm mb-4" id="upload-status-card" tabindex="0">
+            <div class="card-body p-4">
+              <div class="d-flex justify-content-between align-items-center mb-3">
+                <h2 class="card-title h5 mb-0">Upload Progress</h2>
+                <span id="badge-upload-status" class="badge bg-secondary">Idle</span>
+              </div>
+
+              <!-- Reassuring Status Box -->
+              <div id="status-box" class="status-box">
+                <div class="fw-medium text-dark" id="status-line" aria-live="polite">Choose a file to upload (max 500 MB).</div>
+              </div>
+
+              <!-- Progress Bar -->
+              <div class="mb-3">
+                <div class="progress" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
+                  <div class="progress-bar" id="progress-bar-fill" style="width: 0%;">0%</div>
+                </div>
+              </div>
+
+              <!-- Metrics Row -->
+              <div class="row g-2 text-center small mb-4">
+                <div class="col-4">
+                  <div class="border rounded p-2 bg-light">
+                    <span class="text-muted d-block">Speed</span>
+                    <strong id="metric-speed">-- MB/s</strong>
+                  </div>
+                </div>
+                <div class="col-4">
+                  <div class="border rounded p-2 bg-light">
+                    <span class="text-muted d-block">Chunks Sent</span>
+                    <strong id="metric-chunks">0 / 0</strong>
+                  </div>
+                </div>
+                <div class="col-4">
+                  <div class="border rounded p-2 bg-light">
+                    <span class="text-muted d-block">Time Left</span>
+                    <strong id="metric-eta">--</strong>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Chunk Map Header & Legend -->
+              <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+                <h3 class="h6 mb-0 fw-bold">Chunk Map</h3>
+                <div class="d-flex align-items-center flex-wrap">
+                  <span class="legend-item"><span class="legend-swatch" style="background-color: var(--color-waiting-fill); border: 1px solid var(--color-waiting-border);"></span>Waiting</span>
+                  <span class="legend-item"><span class="legend-swatch" style="background-color: var(--color-primary);"></span>Sending</span>
+                  <span class="legend-item"><span class="legend-swatch" style="background-color: var(--color-done);"></span>Done</span>
+                  <span class="legend-item"><span class="legend-swatch" style="background-color: var(--color-failed);"></span>Failed</span>
+                </div>
+              </div>
+
+              <!-- Chunk Grid -->
+              <div class="chunk-map-container mb-3" aria-hidden="true">
+                <div class="chunk-grid" id="chunk-grid">
+                  <div class="text-muted small py-3 w-100 text-center">Chunk map will appear here once a file is chosen.</div>
+                </div>
+              </div>
+
+              <!-- Checksum Success / Download Box -->
+              <div id="completion-box" class="alert alert-success d-none mb-0" role="alert">
+                <h4 class="alert-heading h6 fw-bold mb-1">🎉 Upload Complete · Checksum Verified ✓</h4>
+                <p class="small mb-2 text-success-emphasis">All chunks merged in sequential order on the server. The merged file SHA-256 matches your original file exactly.</p>
+                <div class="d-flex flex-wrap gap-2 align-items-center">
+                  <a href="#" id="btn-download-file" class="btn btn-sm btn-success" download>
+                    📥 Download Merged File
+                  </a>
+                  <button class="btn btn-sm btn-outline-success" onclick="App.resetUploadForm()">
+                    Upload Another File
+                  </button>
+                </div>
+              </div>
+
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SCREEN 2: MY UPLOADS (S2) -->
+    <section id="screen-my-uploads" class="app-screen d-none">
+      <div class="card border-0 shadow-sm">
+        <div class="card-body p-4">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <div>
+              <h1 class="h5 mb-1">My Browser Uploads</h1>
+              <p class="text-muted small mb-0">Saved in browser's localStorage. You can resume any unfinished upload by selecting the same file.</p>
+            </div>
+            <button class="btn btn-sm btn-outline-secondary" onclick="App.renderMyUploads()">Refresh</button>
+          </div>
+
+          <div class="table-responsive">
+            <table class="table table-hover align-middle">
+              <thead class="table-light">
+                <tr>
+                  <th>File Name</th>
+                  <th>Size</th>
+                  <th>Chunks</th>
+                  <th>Status</th>
+                  <th>Last Updated</th>
+                  <th class="text-end">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="my-uploads-tbody">
+                <tr><td colspan="6" class="text-center py-4 text-muted">No uploads recorded in this browser yet.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SCREEN 3: ALL UPLOADS (S3 - ADMIN) -->
+    <section id="screen-all-uploads" class="app-screen d-none">
+      <div class="card border-0 shadow-sm">
+        <div class="card-body p-4">
+          <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+            <div>
+              <h1 class="h5 mb-1">Server Upload Sessions (Admin)</h1>
+              <p class="text-muted small mb-0">All upload sessions stored on disk in <code class="text-dark">storage/</code>.</p>
+            </div>
+            <div class="d-flex align-items-center gap-2">
+              <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle px-3 py-2" id="admin-storage-summary">
+                Storage: 0.0 MB
+              </span>
+              <button class="btn btn-sm btn-outline-secondary" onclick="App.loadAdminUploads()">Refresh</button>
+            </div>
+          </div>
+
+          <div class="table-responsive">
+            <table class="table table-hover align-middle">
+              <thead class="table-light">
+                <tr>
+                  <th>Upload ID</th>
+                  <th>File Name</th>
+                  <th>Size</th>
+                  <th>Chunks (Recv/Total)</th>
+                  <th>Status</th>
+                  <th>SHA-256</th>
+                  <th>Created At</th>
+                  <th class="text-end">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="admin-uploads-tbody">
+                <tr><td colspan="8" class="text-center py-4 text-muted">Loading uploads from server…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SCREEN 4: TEST LAB (S4 - ADMIN) -->
+    <section id="screen-test-lab" class="app-screen d-none">
+      <div class="card border-0 shadow-sm">
+        <div class="card-body p-4">
+          <h1 class="h5 mb-1">Reliability Test Lab (Admin)</h1>
+          <p class="text-muted small mb-3">Simulate unreliable networks with forced chunk dropouts to verify auto-retry with exponential backoff and resume capabilities.</p>
+
+          <div class="row g-4">
+            <!-- Test Settings Column (4 cols) -->
+            <div class="col-12 col-lg-4">
+              <div class="border rounded-3 p-3 bg-light">
+                <h2 class="h6 fw-bold mb-3">Network Drop Simulation</h2>
+
+                <div class="mb-3">
+                  <label for="fail-rate-slider" class="form-label d-flex justify-content-between small fw-medium">
+                    <span>Simulated Chunk Failure Rate:</span>
+                    <strong class="text-primary" id="fail-rate-val">0%</strong>
+                  </label>
+                  <input type="range" class="form-range" id="fail-rate-slider" min="0" max="50" step="5" value="0" oninput="App.updateFlakySettings()">
+                  <small class="text-muted">Chunk requests will randomly fail at this percentage to test automatic retry.</small>
+                </div>
+
+                <div class="mb-3">
+                  <label for="kill-at-select" class="form-label small fw-medium">Kill Connection at % (Mid-Upload):</label>
+                  <select class="form-select form-select-sm" id="kill-at-select" onchange="App.updateFlakySettings()">
+                    <option value="0">Disabled (normal flow)</option>
+                    <option value="25">Kill connection at 25%</option>
+                    <option value="50">Kill connection at 50%</option>
+                    <option value="75">Kill connection at 75%</option>
+                  </select>
+                  <small class="text-muted">Server drops the connection once at this threshold to test mid-upload survival.</small>
+                </div>
+
+                <div class="mb-3">
+                  <label for="test-runs-count" class="form-label small fw-medium">Number of Test Runs (1–30):</label>
+                  <input type="number" class="form-control form-control-sm" id="test-runs-count" min="1" max="30" value="1">
+                  <small class="text-muted">Batch test reliability over repeated network dropouts.</small>
+                </div>
+
+                <hr>
+
+                <h3 class="h6 fw-bold mb-2">Run Test with Synthetic Payload</h3>
+                <p class="small text-muted mb-2">Select payload size to launch the test run(s):</p>
+                <div class="d-flex flex-wrap gap-2 mb-3">
+                  <button class="btn btn-sm btn-outline-primary" onclick="App.runTestLabBatch(5)">5 MB (3 chunks)</button>
+                  <button class="btn btn-sm btn-outline-primary" onclick="App.runTestLabBatch(20)">20 MB (10 chunks)</button>
+                  <button class="btn btn-sm btn-outline-primary" onclick="App.runTestLabBatch(50)">50 MB (25 chunks)</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Test Results Column (8 cols) -->
+            <div class="col-12 col-lg-8">
+              <div class="border rounded-3 p-3 bg-white">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                  <h2 class="h6 fw-bold mb-0">Test Run Execution History</h2>
+                  <button class="btn btn-sm btn-outline-secondary" onclick="App.clearTestRuns()">Clear History</button>
+                </div>
+
+                <div class="table-responsive">
+                  <table class="table table-sm table-bordered align-middle mb-0">
+                    <thead class="table-light">
+                      <tr>
+                        <th>Run #</th>
+                        <th>File / Size</th>
+                        <th>Fail Rate</th>
+                        <th>Retries</th>
+                        <th>Resumed ✓</th>
+                        <th>Checksum ✓/✗</th>
+                        <th>Time</th>
+                      </tr>
+                    </thead>
+                    <tbody id="test-runs-tbody">
+                      <tr><td colspan="7" class="text-center py-3 text-muted">No test runs executed yet. Generate a test file and start an upload to test.</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <div id="test-summary-pill" class="mt-3 p-2 bg-light border rounded small d-none">
+                  <span id="test-summary-text">Summary: 0 / 0 resumed · 0 / 0 checksum ✓</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Project Info Modal -->
+  <div class="modal fade" id="aboutModal" tabindex="-1" aria-labelledby="aboutModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="aboutModalLabel">Resumable Chunked Upload Service</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body small">
+          <h6>OJT College Project (PST_AD_149)</h6>
+          <p>This service allows large file uploads over unreliable connections by splitting files into 2 MB chunks, retrying failed chunks with exponential backoff, and verifying final file integrity via SHA-256.</p>
+          
+          <h6 class="mt-3">Team Roles:</h6>
+          <ul>
+            <li><strong>Ritik Saini (Backend):</strong> Flask server, UploadSession storage, chunk merge in order, whole-file SHA-256 check, admin endpoints, pytest test suite.</li>
+            <li><strong>Kanish (Frontend):</strong> uploader.js, hash.js, store.js, Bootstrap 5 UI, chunk map, test lab, and resume integration.</li>
+          </ul>
+
+          <h6 class="mt-3">Key Design Concepts:</h6>
+          <ul>
+            <li><strong>Idempotency:</strong> Resending the same chunk safely overwrites without duplication.</li>
+            <li><strong>Sequential Chunking:</strong> Uploads chunk-by-chunk to reduce memory and connection overhead.</li>
+            <li><strong>Local State vs Server Truth:</strong> localStorage remembers sessions, but the server is the ultimate source of truth for received chunks.</li>
+          </ul>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Close</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Scripts -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="/static/js/hash.js"></script>
+  <script src="/static/js/store.js"></script>
+  <script src="/static/js/uploader.js"></script>
+  <script src="/static/js/app.js"></script>
+</body>
+</html>
