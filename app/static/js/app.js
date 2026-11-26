@@ -443,10 +443,11 @@ const App = {
 
       let statusBadge = '<span class="badge bg-secondary">Unknown</span>';
       let actionBtn = '';
+      const baseUrl = StorageService.getServerUrl();
 
       if (rec.status === 'complete') {
         statusBadge = '<span class="badge badge-status-complete">Complete ✓</span>';
-        actionBtn = `<a href="/api/files/${rec.uploadId}" class="btn btn-sm btn-outline-success">Download</a>`;
+        actionBtn = `<a href="${baseUrl}/api/files/${rec.uploadId}" class="btn btn-sm btn-outline-success">Download</a>`;
       } else if (rec.status === 'paused' || rec.status === 'uploading') {
         statusBadge = `<span class="badge badge-status-paused">${rec.status}</span>`;
         actionBtn = `<button class="btn btn-sm btn-primary" onclick="App.resumeSpecificUpload('${rec.uploadId}')">Resume</button>`;
@@ -481,7 +482,8 @@ const App = {
     tbody.innerHTML = '<tr><td colspan="8" class="text-center py-4 text-muted">Loading uploads from server…</td></tr>';
 
     try {
-      const res = await fetch('/api/admin/uploads', {
+      const baseUrl = StorageService.getServerUrl();
+      const res = await fetch(`${baseUrl}/api/admin/uploads`, {
         headers: { 'X-Role': 'admin' }
       });
 
@@ -535,7 +537,8 @@ const App = {
     if (!confirm(`Delete upload session ${uploadId}?`)) return;
 
     try {
-      const res = await fetch(`/api/admin/uploads/${uploadId}`, {
+      const baseUrl = StorageService.getServerUrl();
+      const res = await fetch(`${baseUrl}/api/admin/uploads/${uploadId}`, {
         method: 'DELETE',
         headers: { 'X-Role': 'admin' }
       });
@@ -554,7 +557,8 @@ const App = {
    */
   async initFlakySlider() {
     try {
-      const res = await fetch('/api/test/flaky');
+      const baseUrl = StorageService.getServerUrl();
+      const res = await fetch(`${baseUrl}/api/test/flaky`);
       if (res.ok) {
         const data = await res.json();
         const slider = document.getElementById('fail-rate-slider');
@@ -583,7 +587,8 @@ const App = {
     if (label) label.textContent = `${failVal}%`;
 
     try {
-      await fetch(`/api/test/flaky?fail=${failVal}&kill_at=${killVal}`, { method: 'GET' });
+      const baseUrl = StorageService.getServerUrl();
+      await fetch(`${baseUrl}/api/test/flaky?fail=${failVal}&kill_at=${killVal}`, { method: 'GET' });
     } catch (e) {
       console.warn('Failed to update server test lab settings:', e);
     }

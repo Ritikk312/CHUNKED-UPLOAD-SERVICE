@@ -101,7 +101,8 @@ class ChunkUploader {
 
     if (targetUploadId) {
       try {
-        const res = await fetch(`/api/uploads/${targetUploadId}`);
+        const baseUrl = StorageService.getServerUrl();
+        const res = await fetch(`${baseUrl}/api/uploads/${targetUploadId}`);
         if (res.ok) {
           const sessionData = await res.json();
           this.uploadId = sessionData.uploadId;
@@ -119,7 +120,7 @@ class ChunkUploader {
           if (sessionData.status === 'complete') {
             this.setState('complete', {
               uploadId: this.uploadId,
-              downloadUrl: `/api/files/${this.uploadId}`,
+              downloadUrl: `${baseUrl}/api/files/${this.uploadId}`,
               sha256: sessionData.mergedSha256 || sessionData.fileSha256
             });
             return;
@@ -136,7 +137,8 @@ class ChunkUploader {
 
     // 3. Create fresh session if none exists or valid
     if (!this.uploadId) {
-      const createRes = await fetch('/api/uploads', {
+      const baseUrl = StorageService.getServerUrl();
+      const createRes = await fetch(`${baseUrl}/api/uploads`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -244,8 +246,9 @@ class ChunkUploader {
       const chunkSha256 = await HashUtil.computeChunkSha256(chunkBlob);
 
       const chunkBuffer = await chunkBlob.arrayBuffer();
+      const baseUrl = StorageService.getServerUrl();
 
-      const response = await fetch(`/api/uploads/${this.uploadId}/chunks/${index}`, {
+      const response = await fetch(`${baseUrl}/api/uploads/${this.uploadId}/chunks/${index}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/octet-stream',
@@ -328,26 +331,28 @@ class ChunkUploader {
     });
 
     try {
-      const res = await fetch(`/api/uploads/${this.uploadId}/complete`, {
+      const baseUrl = StorageService.getServerUrl();
+      const res = await fetch(`${baseUrl}/api/uploads/${this.uploadId}/complete`, {
         method: 'POST'
       });
 
       const data = await res.json().catch(() => ({}));
 
       if (res.ok && data.status === 'complete') {
+        const dlUrl = data.downloadUrl ? `${baseUrl}${data.downloadUrl}` : `${baseUrl}/api/files/${this.uploadId}`;
         StorageService.saveUpload(this.fingerprint, {
           status: 'complete',
           mergedSha256: data.sha256,
-          downloadUrl: data.downloadUrl
+          downloadUrl: dlUrl
         });
 
         this.setState('complete', {
           uploadId: this.uploadId,
-          downloadUrl: data.downloadUrl,
+          downloadUrl: dlUrl,
           sha256: data.sha256,
           message: 'Upload complete · checksum verified ✓'
         });
-        this.emit('complete', data);
+        this.emit('complete', { ...data, downloadUrl: dlUrl });
       } else {
         StorageService.saveUpload(this.fingerprint, {
           status: 'checksum_failed'

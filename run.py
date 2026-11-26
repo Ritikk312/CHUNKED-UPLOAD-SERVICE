@@ -19,7 +19,7 @@ if __name__ == "__main__":
     FILES_DIR.mkdir(parents=True, exist_ok=True)
     UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
 
-    port = int(os.environ.get("PORT", 5000))
+    port = int(os.environ.get("PORT", 5050))
     print(f"Starting Resumable/Chunked Upload Service on http://0.0.0.0:{port}")
     print(f"Storage path: {root_dir / 'storage'}")
     app.run(host="0.0.0.0", port=port, debug=True)

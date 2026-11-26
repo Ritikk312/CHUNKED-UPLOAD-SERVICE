@@ -79,7 +79,7 @@ pip install -r requirements.txt
 ```bash
 python3 run.py
 ```
-By default, the server starts on `http://127.0.0.1:5000` (or `http://0.0.0.0:5000` for local network access).
+By default, the server starts on `http://127.0.0.1:5050` (or `http://0.0.0.0:5050` for local network access). Port 5050 avoids macOS AirPlay receiver conflicts on port 5000.
 
 ---
 

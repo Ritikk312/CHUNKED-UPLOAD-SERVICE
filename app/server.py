@@ -6,6 +6,20 @@ from app.session import UploadSession, DEFAULT_CHUNK_SIZE, MAX_FILE_SIZE, FILES_
 
 app = Flask(__name__, template_folder="templates", static_folder="static")
 
+@app.after_request
+def add_cors_headers(response):
+    """Enable CORS so a standalone frontend (e.g. on friend's repo/port) can communicate with backend."""
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type, X-Chunk-SHA256, X-Role"
+    return response
+
+
+@app.route("/api/<path:path>", methods=["OPTIONS"])
+def handle_options(path):
+    """Handle pre-flight CORS requests."""
+    return "", 204
+
 # Flaky network simulation state for Test Lab (0 to 50% failure rate, kill connection at %)
 flaky_config = {
     "fail_rate": 0,           # 0 means normal operation, e.g. 20 means 20% failure rate

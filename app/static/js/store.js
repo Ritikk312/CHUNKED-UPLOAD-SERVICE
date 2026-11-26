@@ -13,6 +13,35 @@ const STORAGE_KEYS = {
 
 const StorageService = {
   /**
+   * Returns base URL of Python backend API.
+   * If running standalone, targets http://localhost:5050.
+   */
+  getServerUrl() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEYS.SETTINGS);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed.serverUrl) return parsed.serverUrl.replace(/\/+$/, '');
+      }
+    } catch (e) {}
+    if (window.location.protocol === 'file:' || (window.location.port !== '5050' && window.location.port !== '5000')) {
+      return 'http://localhost:5050';
+    }
+    return '';
+  },
+
+  setServerUrl(url) {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEYS.SETTINGS);
+      const settings = raw ? JSON.parse(raw) : { chunkSizeMB: 2 };
+      settings.serverUrl = url;
+      localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
+    } catch (e) {
+      console.warn('Failed to save server URL:', e);
+    }
+  },
+
+  /**
    * Generates a stable unique fingerprint for a local file
    * based on file name, byte size, and last modified timestamp.
    */
