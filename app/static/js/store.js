@@ -14,7 +14,8 @@ const STORAGE_KEYS = {
 const StorageService = {
   /**
    * Returns base URL of Python backend API.
-   * If running standalone, targets http://localhost:5050.
+   * When served by Flask (localhost, 127.0.0.1:5055, Vercel, etc.), uses same-origin ('').
+   * Falls back to http://localhost:5050 only if opened directly via file:// or overridden in settings.
    */
   getServerUrl() {
     try {
@@ -24,7 +25,7 @@ const StorageService = {
         if (parsed.serverUrl) return parsed.serverUrl.replace(/\/+$/, '');
       }
     } catch (e) {}
-    if (window.location.protocol === 'file:' || (window.location.port !== '5050' && window.location.port !== '5000')) {
+    if (window.location.protocol === 'file:') {
       return 'http://localhost:5050';
     }
     return '';

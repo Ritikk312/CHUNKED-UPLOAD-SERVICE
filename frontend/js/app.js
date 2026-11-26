@@ -270,6 +270,20 @@ const App = {
       document.getElementById('btn-start').disabled = false;
       document.getElementById('status-line').textContent = 'File prepared and fingerprint calculated. Ready to start upload.';
     } catch (err) {
+      if (this.uploader && this.uploader.fileSha256) {
+        this.fullFileHash = this.uploader.fileSha256;
+        document.getElementById('info-file-hash').textContent = `${this.fullFileHash.substring(0, 12)}…`;
+      } else {
+        document.getElementById('info-file-hash').textContent = 'Error';
+      }
+      const statusBadge = document.getElementById('badge-upload-status');
+      const statusBox = document.getElementById('status-box');
+      if (statusBadge) {
+        statusBadge.textContent = 'Error';
+        statusBadge.className = 'badge status-pill bg-danger';
+      }
+      if (statusBox) statusBox.className = 'status-box failed';
+      document.getElementById('status-line').textContent = `Preparation failed: ${err.message}`;
       document.getElementById('file-validation-msg').textContent = `Preparation failed: ${err.message}`;
       document.getElementById('file-validation-msg').classList.remove('d-none');
     }

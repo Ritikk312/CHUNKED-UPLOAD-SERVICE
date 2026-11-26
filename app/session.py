@@ -12,7 +12,27 @@ from werkzeug.utils import secure_filename
 # Default chunk size: 2 MB = 2,097,152 bytes
 DEFAULT_CHUNK_SIZE = 2 * 1024 * 1024
 MAX_FILE_SIZE = None  # No fixed upper file size limit
-BASE_STORAGE_DIR = Path(__file__).resolve().parent.parent / "storage"
+
+
+def _resolve_storage_dir():
+    """Use repo storage locally, or /tmp when running on read-only serverless (e.g. Vercel)."""
+    env_dir = os.environ.get("UPLOAD_STORAGE_DIR")
+    if env_dir:
+        return Path(env_dir)
+    repo_storage = Path(__file__).resolve().parent.parent / "storage"
+    if os.environ.get("VERCEL") or os.environ.get("VERCEL_ENV"):
+        return Path("/tmp") / "chunked_upload_storage"
+    try:
+        repo_storage.mkdir(parents=True, exist_ok=True)
+        probe = repo_storage / ".write_test"
+        probe.touch()
+        probe.unlink()
+        return repo_storage
+    except OSError:
+        return Path("/tmp") / "chunked_upload_storage"
+
+
+BASE_STORAGE_DIR = _resolve_storage_dir()
 UPLOADS_DIR = BASE_STORAGE_DIR / "uploads"
 FILES_DIR = BASE_STORAGE_DIR / "files"
 
