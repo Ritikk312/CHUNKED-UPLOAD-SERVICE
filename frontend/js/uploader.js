@@ -415,11 +415,22 @@ class ChunkUploader {
     }
 
     // Estimate time remaining
-    let etaSec = null;
+    let etaText = '--';
     const remainingChunks = this.totalChunks - doneCount;
     if (speedMBps > 0 && remainingChunks > 0) {
       const remainingMB = (remainingChunks * CHUNK_SIZE) / (1024 * 1024);
-      etaSec = Math.round(remainingMB / speedMBps);
+      const totalSec = Math.round(remainingMB / speedMBps);
+      if (totalSec >= 3600) {
+        const hrs = Math.floor(totalSec / 3600);
+        const mins = Math.floor((totalSec % 3600) / 60);
+        etaText = `${hrs}h ${mins}m`;
+      } else if (totalSec >= 60) {
+        const mins = Math.floor(totalSec / 60);
+        const secs = totalSec % 60;
+        etaText = `${mins}m ${secs}s`;
+      } else {
+        etaText = `${totalSec}s`;
+      }
     }
 
     this.emit('progress', {
@@ -428,7 +439,7 @@ class ChunkUploader {
       doneChunks: doneCount,
       totalChunks: this.totalChunks,
       speedMBps: speedMBps.toFixed(1),
-      etaSec: etaSec !== null ? `${etaSec}s` : '--',
+      etaSec: etaText,
       message: `${doneCount} of ${this.totalChunks} chunks sent`
     });
   }

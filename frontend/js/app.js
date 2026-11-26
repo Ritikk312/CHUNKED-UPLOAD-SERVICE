@@ -205,10 +205,10 @@ const App = {
       return;
     }
 
-    // 2. Validate maximum file size (500 MB)
-    const MAX_SIZE = 500 * 1024 * 1024;
+    // 2. Validate maximum file size (10 GB)
+    const MAX_SIZE = 10 * 1024 * 1024 * 1024;
     if (file.size > MAX_SIZE) {
-      validationBox.textContent = `Selected file exceeds maximum allowed size of 500 MB (${(file.size / (1024 * 1024)).toFixed(1)} MB).`;
+      validationBox.textContent = `Selected file exceeds maximum allowed size of 10 GB (${this.formatFileSize(file.size)}).`;
       validationBox.classList.remove('d-none');
       return;
     }
@@ -230,13 +230,26 @@ const App = {
     await this.initUploader(file);
   },
 
+  formatFileSize(bytes) {
+    if (bytes >= 1024 * 1024 * 1024) {
+      return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+    }
+    if (bytes >= 1024 * 1024) {
+      return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+    }
+    if (bytes >= 1024) {
+      return `${(bytes / 1024).toFixed(1)} KB`;
+    }
+    return `${bytes} B`;
+  },
+
   displayFileInfo(file) {
     document.getElementById('file-info-box').classList.remove('d-none');
     document.getElementById('info-file-name').textContent = file.name;
-    document.getElementById('info-file-size').textContent = `${(file.size / (1024 * 1024)).toFixed(1)} MB (${file.size.toLocaleString()} bytes)`;
+    document.getElementById('info-file-size').textContent = `${this.formatFileSize(file.size)} (${file.size.toLocaleString()} bytes)`;
     
     const chunkCount = Math.ceil(file.size / CHUNK_SIZE);
-    document.getElementById('info-chunk-count').textContent = `${chunkCount} chunks`;
+    document.getElementById('info-chunk-count').textContent = `${chunkCount.toLocaleString()} chunks`;
     document.getElementById('info-file-hash').textContent = 'Calculating…';
     document.getElementById('btn-start').disabled = true;
 
@@ -388,13 +401,50 @@ const App = {
 
   renderChunkGrid(states) {
     const grid = document.getElementById('chunk-grid');
-    grid.innerHTML = '';
-    states.forEach((st, idx) => {
-      const square = document.createElement('div');
-      square.className = `chunk-square ${st}`;
-      square.title = `Chunk ${idx + 1}: ${st}`;
-      grid.appendChild(square);
-    });
+    const MAX_CELLS = 400;
+    const total = states.length;
+    const groupSize = total > 600 ? Math.ceil(total / MAX_CELLS) : 1;
+    const cellCount = Math.ceil(total / groupSize);
+
+    // Rebuild only when cell count changes (avoids 5,120-node DOM rebuilds on 10 GB files)
+    if (grid.children.length !== cellCount || grid.querySelector('.chunk-empty-state')) {
+      grid.innerHTML = '';
+      const frag = document.createDocumentFragment();
+      for (let i = 0; i < cellCount; i++) {
+        const square = document.createElement('div');
+        square.className = 'chunk-square waiting';
+        frag.appendChild(square);
+      }
+      grid.appendChild(frag);
+    }
+
+    for (let c = 0; c < cellCount; c++) {
+      const start = c * groupSize;
+      const end = Math.min(total, start + groupSize);
+      let st = 'waiting';
+      let doneCount = 0;
+      let hasSending = false;
+      let hasFailed = false;
+
+      for (let i = start; i < end; i++) {
+        if (states[i] === 'failed') hasFailed = true;
+        else if (states[i] === 'sending') hasSending = true;
+        else if (states[i] === 'done') doneCount++;
+      }
+
+      if (hasFailed) st = 'failed';
+      else if (hasSending) st = 'sending';
+      else if (doneCount === (end - start)) st = 'done';
+
+      const square = grid.children[c];
+      const nextClass = `chunk-square ${st}`;
+      const nextTitle = groupSize === 1
+        ? `Chunk ${start + 1}: ${st}`
+        : `Chunks ${start + 1}–${end}: ${doneCount}/${end - start} done (${st})`;
+
+      if (square.className !== nextClass) square.className = nextClass;
+      if (square.title !== nextTitle) square.title = nextTitle;
+    }
   },
 
   onUploaderComplete(data) {
@@ -458,7 +508,7 @@ const App = {
     document.getElementById('metric-chunks').textContent = '0 / 0';
     document.getElementById('metric-eta').textContent = '--';
     document.getElementById('status-box').className = 'status-box';
-    document.getElementById('status-line').textContent = 'Choose a file to upload (max 500 MB).';
+    document.getElementById('status-line').textContent = 'Choose a file to upload (max 10 GB).';
     document.getElementById('badge-upload-status').textContent = 'Idle';
     document.getElementById('badge-upload-status').className = 'badge status-pill bg-secondary';
     document.getElementById('btn-start').disabled = true;
@@ -503,7 +553,7 @@ const App = {
 
     records.forEach(rec => {
       const tr = document.createElement('tr');
-      const sizeMB = (rec.size / (1024 * 1024)).toFixed(1);
+      const sizeStr = this.formatFileSize(rec.size);
       const dateStr = rec.updatedAt ? new Date(rec.updatedAt).toLocaleTimeString() : '--';
 
       let statusBadge = '<span class="badge bg-secondary">Unknown</span>';
@@ -522,7 +572,7 @@ const App = {
 
       tr.innerHTML = `
         <td class="fw-semibold">${this.escapeHtml(rec.fileName)}</td>
-        <td class="tabular-nums">${sizeMB} MB</td>
+        <td class="tabular-nums">${sizeStr}</td>
         <td class="tabular-nums">${rec.totalChunks} chunks</td>
         <td>${statusBadge}</td>
         <td><small class="text-muted tabular-nums">${dateStr}</small></td>
@@ -590,7 +640,7 @@ const App = {
       tbody.innerHTML = '';
       data.uploads.forEach(u => {
         const tr = document.createElement('tr');
-        const sizeMB = (u.size / (1024 * 1024)).toFixed(1);
+        const sizeStr = this.formatFileSize(u.size);
         const recvCount = u.received ? u.received.length : 0;
         const shaBadge = u.status === 'complete'
           ? '<span class="badge badge-status-complete">Verified ✓</span>'
@@ -600,7 +650,7 @@ const App = {
         tr.innerHTML = `
           <td><code class="text-dark">${this.escapeHtml(u.uploadId)}</code></td>
           <td class="fw-medium">${this.escapeHtml(u.fileName)}</td>
-          <td class="tabular-nums">${sizeMB} MB</td>
+          <td class="tabular-nums">${sizeStr}</td>
           <td class="tabular-nums">${recvCount} / ${u.totalChunks}</td>
           <td><span class="badge ${u.status === 'complete' ? 'badge-status-complete' : 'badge-status-paused'}">${this.escapeHtml(u.status)}</span></td>
           <td>${shaBadge}</td>

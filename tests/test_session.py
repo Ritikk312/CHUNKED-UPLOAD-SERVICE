@@ -37,9 +37,17 @@ def test_session_validation(temp_storage):
     with pytest.raises(ValueError, match="File size must be greater than 0"):
         UploadSession.create("test.mp4", 0, DEFAULT_CHUNK_SIZE, 1, "a" * 64, uploads_dir, files_dir)
 
-    # Size > 500 MB
+    # Size == 10 GB is allowed
+    ten_gb = 10 * 1024 * 1024 * 1024
+    assert MAX_FILE_SIZE == ten_gb
+    large_session = UploadSession.create(
+        "archive_10gb.tar", ten_gb, DEFAULT_CHUNK_SIZE, 5120, "a" * 64, uploads_dir, files_dir
+    )
+    assert large_session.total_chunks == 5120
+
+    # Size > 10 GB is rejected
     with pytest.raises(ValueError, match="exceeds maximum allowed limit"):
-        UploadSession.create("huge.bin", MAX_FILE_SIZE + 1, DEFAULT_CHUNK_SIZE, 1, "a" * 64, uploads_dir, files_dir)
+        UploadSession.create("huge.bin", MAX_FILE_SIZE + 1, DEFAULT_CHUNK_SIZE, 5121, "a" * 64, uploads_dir, files_dir)
 
     # Invalid SHA-256
     with pytest.raises(ValueError, match="valid 64-character hexadecimal"):

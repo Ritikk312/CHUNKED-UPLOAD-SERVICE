@@ -11,7 +11,7 @@ from werkzeug.utils import secure_filename
 
 # Default chunk size: 2 MB = 2,097,152 bytes
 DEFAULT_CHUNK_SIZE = 2 * 1024 * 1024
-MAX_FILE_SIZE = 500 * 1024 * 1024  # 500 MB limit
+MAX_FILE_SIZE = 10 * 1024 * 1024 * 1024  # 10 GB limit
 BASE_STORAGE_DIR = Path(__file__).resolve().parent.parent / "storage"
 UPLOADS_DIR = BASE_STORAGE_DIR / "uploads"
 FILES_DIR = BASE_STORAGE_DIR / "files"
@@ -105,7 +105,8 @@ class UploadSession:
             raise ValueError("File size must be greater than 0 bytes.")
 
         if size > MAX_FILE_SIZE:
-            raise ValueError(f"File size exceeds maximum allowed limit of {MAX_FILE_SIZE // (1024*1024)} MB.")
+            max_gb = MAX_FILE_SIZE // (1024 * 1024 * 1024)
+            raise ValueError(f"File size exceeds maximum allowed limit of {max_gb} GB.")
 
         if not isinstance(chunk_size, int) or chunk_size <= 0:
             raise ValueError("Chunk size must be a positive integer.")
@@ -258,7 +259,8 @@ class UploadSession:
         self.sync_received_chunks()
 
         # Check all chunks are present
-        missing = [i for i in range(self.total_chunks) if i not in self.meta["received"]]
+        received_set = set(self.meta["received"])
+        missing = [i for i in range(self.total_chunks) if i not in received_set]
         if missing:
             raise ValueError(f"Cannot complete upload: missing chunks {missing[:10]}...")
 

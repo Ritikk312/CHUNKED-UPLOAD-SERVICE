@@ -86,7 +86,7 @@ By default, the server starts on `http://127.0.0.1:5050` (or `http://0.0.0.0:505
 ## 🖥️ Screen Guide & Core User Flows
 
 ### S1: Upload Screen
-1. **Choose a File:** Drag and drop or browse for any file up to 500 MB (e.g. `.mp4`, `.zip`, `.pdf`).
+1. **Choose a File:** Drag and drop or browse for any file up to 10 GB (e.g. `.mp4`, `.zip`, `.pdf`).
 2. **File Fingerprint:** The app calculates the 2 MB chunk breakdown and computes the initial SHA-256 hash with a preparation progress indicator.
 3. **Start Upload:** Click **Start Upload**. Chunks upload sequentially.
 4. **Chunk Map:** Watch the interactive chunk map update in real-time:
@@ -138,7 +138,7 @@ Run the full automated test suite using `pytest`:
 ```
 
 The test suite covers:
-- Input validation (empty names, 0-byte files, >500 MB files, mismatched chunk counts).
+- Input validation (empty names, 0-byte files, >10 GB files, mismatched chunk counts).
 - Per-chunk SHA-256 verification and HTTP 409 rejection of corrupted chunks.
 - Idempotent resending of chunks.
 - Out-of-order chunk arrival and sequential reassembly.
