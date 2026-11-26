@@ -9,7 +9,7 @@ This is the standalone frontend client for the **Resumable / Chunked Upload Serv
 
 ## 🌟 Key Frontend Features
 
-1. **Client-Side Slicing:** Splits files up to 10 GB into sequential 2 MB chunks using the browser's `File.slice()` API.
+1. **Client-Side Slicing:** Splits files of any size into sequential 2 MB chunks using the browser's `File.slice()` API.
 2. **Web Crypto SHA-256 Hashing (`hash.js`):** Computes per-chunk hashes for the `X-Chunk-SHA256` header and prepares whole-file fingerprints before upload.
 3. **Resumable Upload Engine (`uploader.js`):**
    - Sequential chunk uploading with real-time speed (MB/s) and ETA calculations.

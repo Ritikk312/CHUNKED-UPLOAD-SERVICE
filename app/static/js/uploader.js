@@ -420,7 +420,11 @@ class ChunkUploader {
     if (speedMBps > 0 && remainingChunks > 0) {
       const remainingMB = (remainingChunks * CHUNK_SIZE) / (1024 * 1024);
       const totalSec = Math.round(remainingMB / speedMBps);
-      if (totalSec >= 3600) {
+      if (totalSec >= 86400) {
+        const days = Math.floor(totalSec / 86400);
+        const hrs = Math.floor((totalSec % 86400) / 3600);
+        etaText = `${days}d ${hrs}h`;
+      } else if (totalSec >= 3600) {
         const hrs = Math.floor(totalSec / 3600);
         const mins = Math.floor((totalSec % 3600) / 60);
         etaText = `${hrs}h ${mins}m`;

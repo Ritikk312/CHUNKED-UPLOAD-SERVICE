@@ -205,14 +205,6 @@ const App = {
       return;
     }
 
-    // 2. Validate maximum file size (10 GB)
-    const MAX_SIZE = 10 * 1024 * 1024 * 1024;
-    if (file.size > MAX_SIZE) {
-      validationBox.textContent = `Selected file exceeds maximum allowed size of 10 GB (${this.formatFileSize(file.size)}).`;
-      validationBox.classList.remove('d-none');
-      return;
-    }
-
     // Check if resuming an unfinished upload with mismatched file
     const banner = document.getElementById('unfinished-banner');
     if (banner && !banner.classList.contains('d-none')) {
@@ -231,6 +223,9 @@ const App = {
   },
 
   formatFileSize(bytes) {
+    if (bytes >= 1024 ** 4) {
+      return `${(bytes / (1024 ** 4)).toFixed(2)} TB`;
+    }
     if (bytes >= 1024 * 1024 * 1024) {
       return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
     }
@@ -508,7 +503,7 @@ const App = {
     document.getElementById('metric-chunks').textContent = '0 / 0';
     document.getElementById('metric-eta').textContent = '--';
     document.getElementById('status-box').className = 'status-box';
-    document.getElementById('status-line').textContent = 'Choose a file to upload (max 10 GB).';
+    document.getElementById('status-line').textContent = 'Choose a file of any size to upload.';
     document.getElementById('badge-upload-status').textContent = 'Idle';
     document.getElementById('badge-upload-status').className = 'badge status-pill bg-secondary';
     document.getElementById('btn-start').disabled = true;

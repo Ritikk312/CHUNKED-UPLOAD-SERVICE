@@ -11,7 +11,7 @@ from werkzeug.utils import secure_filename
 
 # Default chunk size: 2 MB = 2,097,152 bytes
 DEFAULT_CHUNK_SIZE = 2 * 1024 * 1024
-MAX_FILE_SIZE = 10 * 1024 * 1024 * 1024  # 10 GB limit
+MAX_FILE_SIZE = None  # No fixed upper file size limit
 BASE_STORAGE_DIR = Path(__file__).resolve().parent.parent / "storage"
 UPLOADS_DIR = BASE_STORAGE_DIR / "uploads"
 FILES_DIR = BASE_STORAGE_DIR / "files"
@@ -104,7 +104,7 @@ class UploadSession:
         if not isinstance(size, int) or size <= 0:
             raise ValueError("File size must be greater than 0 bytes.")
 
-        if size > MAX_FILE_SIZE:
+        if MAX_FILE_SIZE is not None and size > MAX_FILE_SIZE:
             max_gb = MAX_FILE_SIZE // (1024 * 1024 * 1024)
             raise ValueError(f"File size exceeds maximum allowed limit of {max_gb} GB.")
 
