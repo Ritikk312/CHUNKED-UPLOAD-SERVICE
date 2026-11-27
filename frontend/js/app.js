@@ -31,6 +31,13 @@ const App = {
     if (dropzone && fileInput) {
       dropzone.addEventListener('click', () => fileInput.click());
 
+      dropzone.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          fileInput.click();
+        }
+      });
+
       dropzone.addEventListener('dragover', (e) => {
         e.preventDefault();
         dropzone.classList.add('dragover');
@@ -57,7 +64,8 @@ const App = {
 
     // Keyboard accessibility: Space key pauses/resumes upload
     window.addEventListener('keydown', (e) => {
-      if (e.code === 'Space' && e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA') {
+      const tag = e.target.tagName;
+      if (e.code === 'Space' && tag !== 'INPUT' && tag !== 'TEXTAREA' && tag !== 'SELECT' && tag !== 'BUTTON') {
         if (this.uploader && (this.uploader.state === 'uploading' || this.uploader.state === 'paused')) {
           e.preventDefault();
           if (this.uploader.state === 'uploading') {
@@ -98,20 +106,42 @@ const App = {
     const role = StorageService.getRole();
     const select = document.getElementById('role-select');
     if (select) select.value = role;
+    this.syncRoleButtons(role);
     this.applyRoleRestrictions(role);
   },
 
   handleRoleChange(newRole) {
     StorageService.setRole(newRole);
+    const select = document.getElementById('role-select');
+    if (select) select.value = newRole;
+    this.syncRoleButtons(newRole);
     this.applyRoleRestrictions(newRole);
+    if (newRole === 'admin' && this.activeScreen === 'all-uploads') {
+      this.loadAdminUploads();
+    }
+  },
+
+  syncRoleButtons(role) {
+    document.querySelectorAll('.role-segmented .btn-segment').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.role === role);
+    });
+  },
+
+  switchToAdmin() {
+    this.handleRoleChange('admin');
   },
 
   applyRoleRestrictions(role) {
     const adminNavs = [document.getElementById('nav-all-uploads'), document.getElementById('nav-test-lab')];
+    const guardAll = document.getElementById('admin-role-guard-all');
     if (role !== 'admin') {
       adminNavs.forEach(nav => {
         if (nav) nav.classList.add('opacity-75');
       });
+      if (guardAll) {
+        guardAll.classList.remove('d-none');
+        guardAll.classList.add('d-flex');
+      }
       if (this.activeScreen === 'all-uploads' || this.activeScreen === 'test-lab') {
         this.showScreen('upload');
       }
@@ -119,7 +149,20 @@ const App = {
       adminNavs.forEach(nav => {
         if (nav) nav.classList.remove('opacity-75');
       });
+      if (guardAll) {
+        guardAll.classList.add('d-none');
+        guardAll.classList.remove('d-flex');
+      }
     }
+  },
+
+  escapeHtml(str) {
+    return String(str ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
   },
 
   /**
@@ -162,14 +205,6 @@ const App = {
       return;
     }
 
-    // 2. Validate maximum file size (500 MB)
-    const MAX_SIZE = 500 * 1024 * 1024;
-    if (file.size > MAX_SIZE) {
-      validationBox.textContent = `Selected file exceeds maximum allowed size of 500 MB (${(file.size / (1024 * 1024)).toFixed(1)} MB).`;
-      validationBox.classList.remove('d-none');
-      return;
-    }
-
     // Check if resuming an unfinished upload with mismatched file
     const banner = document.getElementById('unfinished-banner');
     if (banner && !banner.classList.contains('d-none')) {
@@ -187,13 +222,29 @@ const App = {
     await this.initUploader(file);
   },
 
+  formatFileSize(bytes) {
+    if (bytes >= 1024 ** 4) {
+      return `${(bytes / (1024 ** 4)).toFixed(2)} TB`;
+    }
+    if (bytes >= 1024 * 1024 * 1024) {
+      return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+    }
+    if (bytes >= 1024 * 1024) {
+      return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+    }
+    if (bytes >= 1024) {
+      return `${(bytes / 1024).toFixed(1)} KB`;
+    }
+    return `${bytes} B`;
+  },
+
   displayFileInfo(file) {
     document.getElementById('file-info-box').classList.remove('d-none');
     document.getElementById('info-file-name').textContent = file.name;
-    document.getElementById('info-file-size').textContent = `${(file.size / (1024 * 1024)).toFixed(1)} MB (${file.size.toLocaleString()} bytes)`;
+    document.getElementById('info-file-size').textContent = `${this.formatFileSize(file.size)} (${file.size.toLocaleString()} bytes)`;
     
     const chunkCount = Math.ceil(file.size / CHUNK_SIZE);
-    document.getElementById('info-chunk-count').textContent = `${chunkCount} chunks`;
+    document.getElementById('info-chunk-count').textContent = `${chunkCount.toLocaleString()} chunks`;
     document.getElementById('info-file-hash').textContent = 'Calculating…';
     document.getElementById('btn-start').disabled = true;
 
@@ -219,6 +270,20 @@ const App = {
       document.getElementById('btn-start').disabled = false;
       document.getElementById('status-line').textContent = 'File prepared and fingerprint calculated. Ready to start upload.';
     } catch (err) {
+      if (this.uploader && this.uploader.fileSha256) {
+        this.fullFileHash = this.uploader.fileSha256;
+        document.getElementById('info-file-hash').textContent = `${this.fullFileHash.substring(0, 12)}…`;
+      } else {
+        document.getElementById('info-file-hash').textContent = 'Error';
+      }
+      const statusBadge = document.getElementById('badge-upload-status');
+      const statusBox = document.getElementById('status-box');
+      if (statusBadge) {
+        statusBadge.textContent = 'Error';
+        statusBadge.className = 'badge status-pill bg-danger';
+      }
+      if (statusBox) statusBox.className = 'status-box failed';
+      document.getElementById('status-line').textContent = `Preparation failed: ${err.message}`;
       document.getElementById('file-validation-msg').textContent = `Preparation failed: ${err.message}`;
       document.getElementById('file-validation-msg').classList.remove('d-none');
     }
@@ -231,6 +296,7 @@ const App = {
     const btnPause = document.getElementById('btn-pause');
     const btnResume = document.getElementById('btn-resume');
     const btnCancel = document.getElementById('btn-cancel');
+    const progressBar = document.getElementById('progress-bar-fill');
 
     // Reset controls visibility
     btnStart.classList.add('d-none');
@@ -238,31 +304,36 @@ const App = {
     btnResume.classList.add('d-none');
     btnCancel.classList.add('d-none');
     statusBox.className = 'status-box';
+    if (progressBar) {
+      progressBar.classList.remove('progress-bar-striped', 'progress-bar-animated', 'bg-success', 'bg-warning', 'bg-danger');
+    }
 
     switch (event.state) {
       case 'idle':
         statusBadge.textContent = 'Ready';
-        statusBadge.className = 'badge bg-secondary';
+        statusBadge.className = 'badge status-pill bg-secondary';
         btnStart.classList.remove('d-none');
         btnStart.disabled = false;
         break;
 
       case 'hashing':
         statusBadge.textContent = 'Hashing';
-        statusBadge.className = 'badge bg-info text-dark';
+        statusBadge.className = 'badge status-pill bg-info text-dark';
         break;
 
       case 'uploading':
         statusBadge.textContent = 'Uploading';
-        statusBadge.className = 'badge bg-primary';
+        statusBadge.className = 'badge status-pill bg-primary';
+        if (progressBar) progressBar.classList.add('progress-bar-striped', 'progress-bar-animated');
         btnPause.classList.remove('d-none');
         btnCancel.classList.remove('d-none');
         break;
 
       case 'paused':
         statusBadge.textContent = 'Paused';
-        statusBadge.className = 'badge bg-warning text-dark';
+        statusBadge.className = 'badge status-pill bg-warning text-dark';
         statusBox.classList.add('retrying');
+        if (progressBar) progressBar.classList.add('bg-warning');
         btnResume.classList.remove('d-none');
         btnCancel.classList.remove('d-none');
         document.getElementById('status-line').textContent = 'Upload paused. Press Resume or Space to continue.';
@@ -270,27 +341,30 @@ const App = {
 
       case 'retrying':
         statusBadge.textContent = 'Retrying…';
-        statusBadge.className = 'badge bg-warning text-dark';
+        statusBadge.className = 'badge status-pill bg-warning text-dark';
         statusBox.classList.add('retrying');
+        if (progressBar) progressBar.classList.add('bg-warning');
         btnPause.classList.remove('d-none');
         btnCancel.classList.remove('d-none');
         break;
 
       case 'verifying':
         statusBadge.textContent = 'Verifying';
-        statusBadge.className = 'badge bg-info text-dark';
+        statusBadge.className = 'badge status-pill bg-info text-dark';
         break;
 
       case 'complete':
         statusBadge.textContent = 'Verified ✓';
-        statusBadge.className = 'badge bg-success';
+        statusBadge.className = 'badge status-pill bg-success';
         statusBox.classList.add('complete');
+        if (progressBar) progressBar.classList.add('bg-success');
         break;
 
       case 'failed':
         statusBadge.textContent = 'Failed ✗';
-        statusBadge.className = 'badge bg-danger';
+        statusBadge.className = 'badge status-pill bg-danger';
         statusBox.classList.add('failed');
+        if (progressBar) progressBar.classList.add('bg-danger');
         btnResume.classList.remove('d-none');
         break;
     }
@@ -336,13 +410,50 @@ const App = {
 
   renderChunkGrid(states) {
     const grid = document.getElementById('chunk-grid');
-    grid.innerHTML = '';
-    states.forEach((st, idx) => {
-      const square = document.createElement('div');
-      square.className = `chunk-square ${st}`;
-      square.title = `Chunk ${idx + 1}: ${st}`;
-      grid.appendChild(square);
-    });
+    const MAX_CELLS = 400;
+    const total = states.length;
+    const groupSize = total > 600 ? Math.ceil(total / MAX_CELLS) : 1;
+    const cellCount = Math.ceil(total / groupSize);
+
+    // Rebuild only when cell count changes (avoids 5,120-node DOM rebuilds on 10 GB files)
+    if (grid.children.length !== cellCount || grid.querySelector('.chunk-empty-state')) {
+      grid.innerHTML = '';
+      const frag = document.createDocumentFragment();
+      for (let i = 0; i < cellCount; i++) {
+        const square = document.createElement('div');
+        square.className = 'chunk-square waiting';
+        frag.appendChild(square);
+      }
+      grid.appendChild(frag);
+    }
+
+    for (let c = 0; c < cellCount; c++) {
+      const start = c * groupSize;
+      const end = Math.min(total, start + groupSize);
+      let st = 'waiting';
+      let doneCount = 0;
+      let hasSending = false;
+      let hasFailed = false;
+
+      for (let i = start; i < end; i++) {
+        if (states[i] === 'failed') hasFailed = true;
+        else if (states[i] === 'sending') hasSending = true;
+        else if (states[i] === 'done') doneCount++;
+      }
+
+      if (hasFailed) st = 'failed';
+      else if (hasSending) st = 'sending';
+      else if (doneCount === (end - start)) st = 'done';
+
+      const square = grid.children[c];
+      const nextClass = `chunk-square ${st}`;
+      const nextTitle = groupSize === 1
+        ? `Chunk ${start + 1}: ${st}`
+        : `Chunks ${start + 1}–${end}: ${doneCount}/${end - start} done (${st})`;
+
+      if (square.className !== nextClass) square.className = nextClass;
+      if (square.title !== nextTitle) square.title = nextTitle;
+    }
   },
 
   onUploaderComplete(data) {
@@ -396,14 +507,19 @@ const App = {
     document.getElementById('file-input').value = '';
     document.getElementById('file-info-box').classList.add('d-none');
     document.getElementById('completion-box').classList.add('d-none');
-    document.getElementById('chunk-grid').innerHTML = '<div class="text-muted small py-3 w-100 text-center">Chunk map will appear here once a file is chosen.</div>';
+    document.getElementById('chunk-grid').innerHTML = '<div class="chunk-empty-state">Chunk map will appear here once a file is chosen.</div>';
+    const progressBar = document.getElementById('progress-bar-fill');
+    if (progressBar) {
+      progressBar.classList.remove('progress-bar-striped', 'progress-bar-animated', 'bg-success', 'bg-warning', 'bg-danger');
+    }
     this.updateProgressBar(0);
     document.getElementById('metric-speed').textContent = '-- MB/s';
     document.getElementById('metric-chunks').textContent = '0 / 0';
     document.getElementById('metric-eta').textContent = '--';
-    document.getElementById('status-line').textContent = 'Choose a file to upload (max 500 MB).';
+    document.getElementById('status-box').className = 'status-box';
+    document.getElementById('status-line').textContent = 'Choose a file of any size to upload.';
     document.getElementById('badge-upload-status').textContent = 'Idle';
-    document.getElementById('badge-upload-status').className = 'badge bg-secondary';
+    document.getElementById('badge-upload-status').className = 'badge status-pill bg-secondary';
     document.getElementById('btn-start').disabled = true;
     document.getElementById('btn-start').classList.remove('d-none');
     document.getElementById('btn-pause').classList.add('d-none');
@@ -415,8 +531,10 @@ const App = {
     if (this.fullFileHash) {
       navigator.clipboard.writeText(this.fullFileHash);
       const btn = document.getElementById('btn-copy-hash');
-      btn.textContent = '✅';
-      setTimeout(() => { btn.textContent = '📋'; }, 1500);
+      const copyIcon = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
+      const checkIcon = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#15803d" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+      btn.innerHTML = checkIcon;
+      setTimeout(() => { btn.innerHTML = copyIcon; }, 1500);
     }
   },
 
@@ -429,7 +547,13 @@ const App = {
     const records = Object.values(all);
 
     if (records.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-muted">No uploads recorded in this browser yet.</td></tr>';
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="6" class="text-center py-5 text-muted">
+            <div class="mb-2">No uploads recorded in this browser yet.</div>
+            <button type="button" class="btn btn-sm btn-outline-primary btn-compact" onclick="App.showScreen('upload')">Upload a File</button>
+          </td>
+        </tr>`;
       return;
     }
 
@@ -438,7 +562,7 @@ const App = {
 
     records.forEach(rec => {
       const tr = document.createElement('tr');
-      const sizeMB = (rec.size / (1024 * 1024)).toFixed(1);
+      const sizeStr = this.formatFileSize(rec.size);
       const dateStr = rec.updatedAt ? new Date(rec.updatedAt).toLocaleTimeString() : '--';
 
       let statusBadge = '<span class="badge bg-secondary">Unknown</span>';
@@ -447,20 +571,20 @@ const App = {
 
       if (rec.status === 'complete') {
         statusBadge = '<span class="badge badge-status-complete">Complete ✓</span>';
-        actionBtn = `<a href="${baseUrl}/api/files/${rec.uploadId}" class="btn btn-sm btn-outline-success">Download</a>`;
+        actionBtn = `<a href="${baseUrl}/api/files/${encodeURIComponent(rec.uploadId)}" class="btn btn-sm btn-outline-success btn-compact">Download</a>`;
       } else if (rec.status === 'paused' || rec.status === 'uploading') {
-        statusBadge = `<span class="badge badge-status-paused">${rec.status}</span>`;
-        actionBtn = `<button class="btn btn-sm btn-primary" onclick="App.resumeSpecificUpload('${rec.uploadId}')">Resume</button>`;
+        statusBadge = `<span class="badge badge-status-paused">${this.escapeHtml(rec.status)}</span>`;
+        actionBtn = `<button type="button" class="btn btn-sm btn-primary btn-compact" onclick="App.resumeSpecificUpload('${this.escapeHtml(rec.uploadId)}')">Resume</button>`;
       } else {
         statusBadge = '<span class="badge badge-status-failed">Failed</span>';
       }
 
       tr.innerHTML = `
-        <td class="fw-semibold">${rec.fileName}</td>
-        <td>${sizeMB} MB</td>
-        <td>${rec.totalChunks} chunks</td>
+        <td class="fw-semibold">${this.escapeHtml(rec.fileName)}</td>
+        <td class="tabular-nums">${sizeStr}</td>
+        <td class="tabular-nums">${rec.totalChunks} chunks</td>
         <td>${statusBadge}</td>
-        <td><small class="text-muted">${dateStr}</small></td>
+        <td><small class="text-muted tabular-nums">${dateStr}</small></td>
         <td class="text-end">${actionBtn}</td>
       `;
       tbody.appendChild(tr);
@@ -479,7 +603,23 @@ const App = {
    */
   async loadAdminUploads() {
     const tbody = document.getElementById('admin-uploads-tbody');
-    tbody.innerHTML = '<tr><td colspan="8" class="text-center py-4 text-muted">Loading uploads from server…</td></tr>';
+    const guardAll = document.getElementById('admin-role-guard-all');
+    const role = StorageService.getRole();
+
+    if (role !== 'admin') {
+      if (guardAll) {
+        guardAll.classList.remove('d-none');
+        guardAll.classList.add('d-flex');
+      }
+      tbody.innerHTML = '<tr><td colspan="8" class="text-center py-5 text-muted">Switch role to <strong>Platform Admin</strong> to view server upload sessions.</td></tr>';
+      return;
+    }
+
+    if (guardAll) {
+      guardAll.classList.add('d-none');
+      guardAll.classList.remove('d-flex');
+    }
+    tbody.innerHTML = '<tr><td colspan="8" class="text-center py-5 text-muted">Loading uploads from server…</td></tr>';
 
     try {
       const baseUrl = StorageService.getServerUrl();
@@ -502,34 +642,36 @@ const App = {
       }
 
       if (!data.uploads || data.uploads.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="8" class="text-center py-4 text-muted">No files on the server.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="8" class="text-center py-5 text-muted">No files on the server.</td></tr>';
         return;
       }
 
       tbody.innerHTML = '';
       data.uploads.forEach(u => {
         const tr = document.createElement('tr');
-        const sizeMB = (u.size / (1024 * 1024)).toFixed(1);
+        const sizeStr = this.formatFileSize(u.size);
         const recvCount = u.received ? u.received.length : 0;
-        const isMatch = u.status === 'complete' ? '✓' : '✗';
+        const shaBadge = u.status === 'complete'
+          ? '<span class="badge badge-status-complete">Verified ✓</span>'
+          : '<span class="badge badge-status-paused">Pending</span>';
         const dateStr = u.createdAt ? new Date(u.createdAt).toLocaleTimeString() : '--';
 
         tr.innerHTML = `
-          <td><code>${u.uploadId}</code></td>
-          <td class="fw-medium">${u.fileName}</td>
-          <td>${sizeMB} MB</td>
-          <td>${recvCount} / ${u.totalChunks}</td>
-          <td><span class="badge ${u.status === 'complete' ? 'bg-success' : 'bg-warning text-dark'}">${u.status}</span></td>
-          <td><code>${isMatch}</code></td>
-          <td><small class="text-muted">${dateStr}</small></td>
+          <td><code class="text-dark">${this.escapeHtml(u.uploadId)}</code></td>
+          <td class="fw-medium">${this.escapeHtml(u.fileName)}</td>
+          <td class="tabular-nums">${sizeStr}</td>
+          <td class="tabular-nums">${recvCount} / ${u.totalChunks}</td>
+          <td><span class="badge ${u.status === 'complete' ? 'badge-status-complete' : 'badge-status-paused'}">${this.escapeHtml(u.status)}</span></td>
+          <td>${shaBadge}</td>
+          <td><small class="text-muted tabular-nums">${dateStr}</small></td>
           <td class="text-end">
-            <button class="btn btn-sm btn-outline-danger" onclick="App.deleteAdminUpload('${u.uploadId}')">Delete</button>
+            <button type="button" class="btn btn-sm btn-outline-danger btn-compact" onclick="App.deleteAdminUpload('${this.escapeHtml(u.uploadId)}')">Delete</button>
           </td>
         `;
         tbody.appendChild(tr);
       });
     } catch (err) {
-      tbody.innerHTML = `<tr><td colspan="8" class="text-center py-4 text-danger">${err.message}</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="8" class="text-center py-4 text-danger">${this.escapeHtml(err.message)}</td></tr>`;
     }
   },
 
@@ -570,11 +712,25 @@ const App = {
         }
         if (killSelect && data.killAtPercent !== undefined) {
           killSelect.value = data.killAtPercent;
+          this.syncKillAtButtons(String(data.killAtPercent));
         }
       }
     } catch (e) {
       // ignore
     }
+  },
+
+  setKillAt(val) {
+    const killSelect = document.getElementById('kill-at-select');
+    if (killSelect) killSelect.value = val;
+    this.syncKillAtButtons(String(val));
+    this.updateFlakySettings();
+  },
+
+  syncKillAtButtons(val) {
+    document.querySelectorAll('.kill-at-segmented .btn-segment').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.kill === val);
+    });
   },
 
   async updateFlakySettings() {

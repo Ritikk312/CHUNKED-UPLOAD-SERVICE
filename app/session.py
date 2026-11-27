@@ -11,8 +11,28 @@ from werkzeug.utils import secure_filename
 
 # Default chunk size: 2 MB = 2,097,152 bytes
 DEFAULT_CHUNK_SIZE = 2 * 1024 * 1024
-MAX_FILE_SIZE = 500 * 1024 * 1024  # 500 MB limit
-BASE_STORAGE_DIR = Path(__file__).resolve().parent.parent / "storage"
+MAX_FILE_SIZE = None  # No fixed upper file size limit
+
+
+def _resolve_storage_dir():
+    """Use repo storage locally, or /tmp when running on read-only serverless (e.g. Vercel)."""
+    env_dir = os.environ.get("UPLOAD_STORAGE_DIR")
+    if env_dir:
+        return Path(env_dir)
+    repo_storage = Path(__file__).resolve().parent.parent / "storage"
+    if os.environ.get("VERCEL") or os.environ.get("VERCEL_ENV"):
+        return Path("/tmp") / "chunked_upload_storage"
+    try:
+        repo_storage.mkdir(parents=True, exist_ok=True)
+        probe = repo_storage / ".write_test"
+        probe.touch()
+        probe.unlink()
+        return repo_storage
+    except OSError:
+        return Path("/tmp") / "chunked_upload_storage"
+
+
+BASE_STORAGE_DIR = _resolve_storage_dir()
 UPLOADS_DIR = BASE_STORAGE_DIR / "uploads"
 FILES_DIR = BASE_STORAGE_DIR / "files"
 
@@ -104,8 +124,9 @@ class UploadSession:
         if not isinstance(size, int) or size <= 0:
             raise ValueError("File size must be greater than 0 bytes.")
 
-        if size > MAX_FILE_SIZE:
-            raise ValueError(f"File size exceeds maximum allowed limit of {MAX_FILE_SIZE // (1024*1024)} MB.")
+        if MAX_FILE_SIZE is not None and size > MAX_FILE_SIZE:
+            max_gb = MAX_FILE_SIZE // (1024 * 1024 * 1024)
+            raise ValueError(f"File size exceeds maximum allowed limit of {max_gb} GB.")
 
         if not isinstance(chunk_size, int) or chunk_size <= 0:
             raise ValueError("Chunk size must be a positive integer.")
@@ -258,7 +279,8 @@ class UploadSession:
         self.sync_received_chunks()
 
         # Check all chunks are present
-        missing = [i for i in range(self.total_chunks) if i not in self.meta["received"]]
+        received_set = set(self.meta["received"])
+        missing = [i for i in range(self.total_chunks) if i not in received_set]
         if missing:
             raise ValueError(f"Cannot complete upload: missing chunks {missing[:10]}...")
 
