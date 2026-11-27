@@ -281,7 +281,11 @@ kbd {
 
 /* Upload Dropzone */
 .dropzone-area {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   border: 2px dashed #cbd5e1;
+
   border-radius: 16px;
   padding: 2.25rem 1.25rem;
   text-align: center;
